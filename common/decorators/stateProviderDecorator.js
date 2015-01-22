@@ -78,12 +78,11 @@
             delete options.controllerUrl;
         }
         
-        //TODO: '$delegate' for provider does not work properly
-        decorateMethodState.$inject = ['$stateProvider'];
-        function decorateMethodState($delegate) {
-            var origState = $delegate.state;
+        decorateStateProvider.$inject = ['$stateProvider'];
+        function decorateStateProvider($stateProvider) {
+            var origState = $stateProvider.state;
 
-            $delegate.state = function (name, options) {
+            $stateProvider.state = function (name, options) {
                 var stateSettings = {
                         index: 0,
                         resolveNames: []
@@ -94,31 +93,71 @@
                     options.name = name;
                 }
 
-                if(!options.resolve) {
+                if(typeof(options) === 'string') {
+                    options = {
+                        resolve: {},
+                        templateUrl: options + '.html',
+                        controllerUrl: options + '.js'
+                    }
+                } else if(!options.resolve) {
                     options.resolve = {};
                 }
+
                 stateSettings.resolveNames = Object.keys(options.resolve);
                 processControllerUrl(options, options.resolve, stateSettings);
                 
                 if(options.views) {
                     for(var key in options.views) {
                         var view = options.views[key];
+                        if(typeof(view) === 'string') {
+                            view = options.views[key] = {
+                                templateUrl: view + '.html',
+                                controllerUrl: view + '.js'
+                            };
+                        }
                         processControllerUrl(view, options.resolve, stateSettings);
                     }
                 }
-                return origState.call($delegate, options);
+                return origState.call($stateProvider, options);
             }
-            return $delegate;
+        }
+        
+        decorateRouteProvider.$inject = ['$routeProvider'];
+        function decorateRouteProvider($routeProvider) {
+            var origWhen = $routeProvider.when;
+
+            $routeProvider.when = function(url, options) {
+                var stateSettings = {
+                        index: 0,
+                        resolveNames: []
+                    };
+
+                if(typeof(options) === 'string') {
+                    options = {
+                        resolve: {},
+                        templateUrl: options + '.html',
+                        controllerUrl: options + '.js'
+                    }
+                } else if(!options.resolve) {
+                    options.resolve = {};
+                }
+                stateSettings.resolveNames = Object.keys(options.resolve);
+                processControllerUrl(options, options.resolve, stateSettings);
+                return origWhen.call($routeProvider, url, options);
+            }
         }
 
-        /*
-        // $stateProvider is important to inject for intialization (state method to be present)
-        stateProviderDecorator.$inject = ['$provide', '$stateProvider'];
-        function stateProviderDecorator ($provide) {
-            $provide.decorator('$state', decorateMethodState);
-        }
-        */
+        decorateStateAndRouteProvider.$inject = ['$injector']
+        function decorateStateAndRouteProvider($injector) {
+            if($injector.has("$stateProvider")) {
+                $injector.invoke(decorateStateProvider, this);
+            }
 
-        return decorateMethodState;
+            if($injector.has("$routeProvider")) {
+                $injector.invoke(decorateRouteProvider, this);
+            }
+        }
+
+        return decorateStateAndRouteProvider;
     });
 }(define));
